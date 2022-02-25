@@ -21,6 +21,8 @@ int main(int argc, char ** argv)
             key_input.publish(message);
         else if(message.data=='W'||message.data=='w')
             key_input.publish(message);
+        else if(message.data=='Q'||message.data=='q')
+            break;
         else
             ROS_WARN("PLEASE TYPE AGAIN!");
         ROS_INFO("SENDING NEW COMMAND");

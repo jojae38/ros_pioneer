@@ -17,32 +17,26 @@ const double Robot_wheel_r = 0.11;//meter
 const double Robot_center_to_camera_center = 0.34;//meter
 
 #define PI 3.141592
+
+enum MODE {Stop,Front,Right,Left,Find_Marker,Position_adjust};
 void poseCallback(const nav_msgs::Odometry::ConstPtr &msg);
 
-struct FLAG{
-    bool stop;
-    bool front;
-    bool right;
-    bool left;
-    bool See_Marker;
-    bool Position_adjust;
-};
 struct ORDER
 {
     double x;
     double y;
     int order_num;
 };
+
 class Pioneer
 {
     private:
     double speed;
     double angle_speed;
     double current_time;
-   
+    int mode;
     geometry_msgs::Twist vel_msg;
-    cv::VideoCapture *capture;
-    FLAG Control_Flag;
+    //cv::VideoCapture *capture;
     vector<ORDER> Adjust_Order;
     vector<ORDER> Move_Order;
 
@@ -50,12 +44,13 @@ class Pioneer
     Pioneer();
     ~Pioneer();
     //Robot Movement
+    void Get_param();
+    bool set_mode(int num);
     bool go_front();
     bool turn_left();
     bool turn_right();
     bool stop();
-    bool run_robot(FLAG flag,ros::Publisher cmd_vel_pub);
-    void set_flag(FLAG *flag);
+    bool run_robot(ros::Publisher cmd_vel_pub);
 
     bool Adjust_Position();
     
@@ -72,23 +67,18 @@ class Pioneer
 Pioneer::Pioneer()
 {
     
-    
-    Control_Flag={true,false,false,false,false,false};
-    ros::NodeHandle nh_private("~");
-    nh_private.param<double>("speed", speed, 0.1); 
-    nh_private.param<double>("angle_speed", angle_speed, 0.1);
-    angle_speed*=PI;
+    mode=MODE::Stop;
 
     vel_msg.linear.y=0;
     vel_msg.linear.z=0;
     vel_msg.angular.x=0;
     vel_msg.angular.y=0;
-    cv::VideoCapture cap(0);
-    *capture=cap;
-    if(!cap.isOpened())
-		std::cerr<<"Camera open failed!"<<std::endl;
-    else
-        ROS_INFO("Camera model [ELP-USBFHD06H-L21] connected");
+    //cv::VideoCapture cap(0);
+    //*capture=cap;
+    // if(!cap.isOpened())
+	// 	std::cerr<<"Camera open failed!"<<std::endl;
+    // else
+    //     ROS_INFO("Camera model [ELP-USBFHD06H-L21] connected");
     ROS_INFO("Starting Pioneer");
 }
 Pioneer::~Pioneer()
@@ -96,15 +86,23 @@ Pioneer::~Pioneer()
     cv::destroyAllWindows();
     ROS_INFO("END Pioneer");
 }
+void Pioneer::Get_param()
+{
+    ros::NodeHandle nh_private("~");
+    nh_private.param<double>("speed", speed, 0.1); 
+    nh_private.param<double>("angle_speed", angle_speed, 0.1);
+    angle_speed*=PI;
+}
 bool Pioneer::go_front()
 {
     vel_msg.linear.x=speed;
+    vel_msg.angular.z=0;
     return true;
 }
 bool Pioneer::turn_left()
 {
     vel_msg.linear.x=speed;
-    vel_msg.angular.z=angle_speed;
+    vel_msg.angular.z=-angle_speed;
     return true;
 }
 bool Pioneer::turn_right()
@@ -123,58 +121,60 @@ bool Pioneer::is_marker_on_sight()
 {
     return true;
 }
-bool Pioneer::run_camera()
+bool Pioneer::set_mode(int num)
 {
-    cv::Mat frame;
-    	*capture>>frame;
-	if(frame.empty())
-	    return -1;
-    cv::namedWindow("frame");
-    cv::moveWindow("frame",10,0);
-    cv::imshow("frame",frame);
-    if(cv::waitKey(10)==27)
-        return 0;
-    return 0;
+    if(mode!=num)
+    {
+        mode=num;
+        return true;
+    }
+    return false;
 }
-
-void Pioneer::set_flag(FLAG *flag)
-{
-    Control_Flag=*flag;
-}
-bool Pioneer::run_robot(FLAG flag,ros::Publisher cmd_vel_pub)
+// bool Pioneer::run_camera()
+// {
+//     cv::Mat frame;
+//     	*capture>>frame;
+// 	if(frame.empty())
+// 	    return -1;
+//     cv::namedWindow("frame");
+//     cv::moveWindow("frame",10,0);
+//     cv::imshow("frame",frame);
+//     if(cv::waitKey(10)==27)
+//         return 0;
+//     return 0;
+// }
+bool Pioneer::run_robot(ros::Publisher cmd_vel_pub)
 {   ros::Rate rate(60);
     while(ros::ok())
     {
-        Pioneer::run_camera();
-        if(Control_Flag.stop)
+        // Pioneer::run_camera();
+        if(mode==MODE::Stop)
         {
             Pioneer::stop();
         }
-        else if(Control_Flag.See_Marker)
+        else if(mode==MODE::Find_Marker)
         {
-            Pioneer::stop();
+            // Pioneer::stop();
+            // ROS_INFO("STOP");
             //calculate middle pos
             //set to marker location
         }
-        else if(Control_Flag.Position_adjust)
+        else if(mode==MODE::Position_adjust)
         {
-            Pioneer::stop();
+            // Pioneer::stop();
+            // ROS_INFO("STOP");
         }
-        else if(Control_Flag.front)
+        else if(mode==MODE::Front)
         {
             Pioneer::go_front();
         }
-        else if(Control_Flag.left)
+        else if(mode==MODE::Left)
         {
             Pioneer::turn_left();
         }
-        else if(Control_Flag.right)
+        else if(mode==MODE::Right)
         {
             Pioneer::turn_right();
-        }
-        else
-        {
-            Pioneer::stop();
         }
         cmd_vel_pub.publish(vel_msg);
         rate.sleep();
