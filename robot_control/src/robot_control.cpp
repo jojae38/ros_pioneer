@@ -45,12 +45,17 @@ void keycallback(const std_msgs::Char::ConstPtr &msg)
         Pioneer_.set_mode(MODE::Left);
         ROS_INFO("CHANGE_MODE -> LEFT");
     }
+    else if(msg->data=='x'||msg->data=='X')
+    {
+        Pioneer_.set_mode(MODE::Back);
+        ROS_INFO("CHANGE_MODE -> BACK");
+    }
     ROS_INFO("GET KEY %c",msg->data);
 }
 void poseCallback(const nav_msgs::Odometry::ConstPtr &msg)
 {
-    cout << msg->header.frame_id <<endl;
-    cout << msg->header.seq<<endl;
-    cout << msg->header.stamp<<endl;
+    // cout << msg->header.frame_id <<endl;
+    // cout << msg->header.seq<<endl;
+    // cout << msg->header.stamp<<endl;
 
 }

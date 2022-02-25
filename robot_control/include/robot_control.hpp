@@ -18,7 +18,7 @@ const double Robot_center_to_camera_center = 0.34;//meter
 
 #define PI 3.141592
 
-enum MODE {Stop,Front,Right,Left,Find_Marker,Position_adjust};
+enum MODE {Stop,Front,Right,Left,Back,Find_Marker,Position_adjust};
 void poseCallback(const nav_msgs::Odometry::ConstPtr &msg);
 
 struct ORDER
@@ -50,6 +50,7 @@ class Pioneer
     bool turn_left();
     bool turn_right();
     bool stop();
+    bool back();
     bool run_robot(ros::Publisher cmd_vel_pub);
 
     bool Adjust_Position();
@@ -102,18 +103,24 @@ bool Pioneer::go_front()
 bool Pioneer::turn_left()
 {
     vel_msg.linear.x=speed;
-    vel_msg.angular.z=-angle_speed;
+    vel_msg.angular.z=angle_speed;
     return true;
 }
 bool Pioneer::turn_right()
 {
     vel_msg.linear.x=speed;
-    vel_msg.angular.z=angle_speed;
+    vel_msg.angular.z=-angle_speed;
     return true;
 }
 bool Pioneer::stop()
 {
     vel_msg.linear.x=0;
+    vel_msg.angular.z=0;
+    return true;
+}
+bool Pioneer::back()
+{
+    vel_msg.linear.x=-speed;
     vel_msg.angular.z=0;
     return true;
 }
@@ -175,6 +182,10 @@ bool Pioneer::run_robot(ros::Publisher cmd_vel_pub)
         else if(mode==MODE::Right)
         {
             Pioneer::turn_right();
+        }
+        else if(mode==MODE::Back)
+        {
+            Pioneer::back();
         }
         cmd_vel_pub.publish(vel_msg);
         rate.sleep();
