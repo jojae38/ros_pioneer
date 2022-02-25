@@ -16,10 +16,13 @@ int main(int argc, char **argv)
     key_input=n.subscribe("key_input",10,keycallback);
     cmd_vel_pub=n.advertise<geometry_msgs::Twist>("/RosAria/cmd_vel",10);
     Pioneer_.Get_param();
-
-
-    
-    Pioneer_.run_robot(cmd_vel_pub);
+    cv::VideoCapture cap(0);
+    if(!cap.isOpened())
+		std::cerr<<"Camera open failed!"<<std::endl;
+    else
+        ROS_INFO("Camera model [ELP-USBFHD06H-L21] connected");
+        
+    Pioneer_.run_robot(cmd_vel_pub,cap);
     return 0;    
 }
 void keycallback(const std_msgs::Char::ConstPtr &msg)
