@@ -60,5 +60,4 @@ void poseCallback(const nav_msgs::Odometry::ConstPtr &msg)
     // cout << msg->header.frame_id <<endl;
     // cout << msg->header.seq<<endl;
     // cout << msg->header.stamp<<endl;
-
 }

@@ -15,6 +15,7 @@ const double camera_width = 0.44;//meter
 const double camera_length = 0.34;//meter
 const double Robot_wheel_r = 0.11;//meter
 const double Robot_center_to_camera_center = 0.34;//meter
+const int MARKER_FULL_num= 1000;
 
 #define PI 3.141592
 
@@ -37,6 +38,13 @@ struct COLOR{
     int B;
     int offset;
 };
+struct Visual_Map{
+    int cross;
+    int map_row;
+    int map_col;
+    int row_block;
+    int col_block;
+};
 class Pioneer
 {
     private:
@@ -44,19 +52,30 @@ class Pioneer
     double angle_speed;
     double current_time;
     int mode;
+    int number;
+    int MARKER_pixel;
     struct COLOR MARKER_COLOR;
+    struct COLOR ROBOT_COLOR_X;
+    struct COLOR ROBOT_COLOR_Y;
+    struct COLOR ORDER_COLOR;
+
     struct POSITION ROBOT_POS;
+    struct Visual_Map Map;
     geometry_msgs::Twist vel_msg;
-    //cv::VideoCapture *capture;
+
     vector<ORDER> Adjust_Order;
     vector<ORDER> Move_Order;
+
+    POSITION ROBOT;
     vector<POSITION> MARKER;
+    vector<POSITION> PATH;
 
     public:
     Pioneer();
     ~Pioneer();
     //Robot Movement
     void Get_param();
+    void set_Position(struct POSITION &pos,double x,double y,double th);
     bool set_mode(int num);
     bool go_front();
     bool turn_left();
@@ -64,8 +83,7 @@ class Pioneer
     bool stop();
     bool back();
     bool run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap);
-
-    bool Adjust_Position();
+    bool update_ROBOT_Position();
     
     //Camera Part
     bool is_marker_on_sight();
@@ -73,10 +91,14 @@ class Pioneer
     bool Publish_image();
     bool run_camera(cv::VideoCapture &cap);
     
-
-    //Rviz
+    //visualize
+    void set_Visual_map(int cross,int row,int col);
+    void set_color(struct COLOR &color,int R,int G,int B,int offset);
     void visualize();
-    
+    void draw_robot_at(double x,double y,double th,cv::Mat *map);
+    void draw_marker_at(double x,double y,cv::Mat &map,struct COLOR color);
+    int convert_world_pos_x(double x);
+    int convert_world_pos_y(double y);
 };
   
 Pioneer::Pioneer()
@@ -86,11 +108,14 @@ Pioneer::Pioneer()
     vel_msg.linear.z=0;
     vel_msg.angular.x=0;
     vel_msg.angular.y=0;
-    MARKER_COLOR.B=20;
-    MARKER_COLOR.G=20;
-    MARKER_COLOR.R=235;
-    MARKER_COLOR.offset=20;
-
+    MARKER_pixel=0;
+    Pioneer::set_color(MARKER_COLOR,290,-10,-10,100);
+    Pioneer::set_color(ROBOT_COLOR_X,100,200,100,0);
+    Pioneer::set_color(ROBOT_COLOR_Y,100,100,200,0);
+    Pioneer::set_color(ORDER_COLOR,20,20,235,0);
+    Pioneer::set_Position(ROBOT,0,0,1);
+    Pioneer::set_Visual_map(12,1200,1200);
+    int number=0;
     ROS_INFO("Starting Pioneer");
 }
 Pioneer::~Pioneer()
@@ -104,6 +129,12 @@ void Pioneer::Get_param()
     nh_private.param<double>("speed", speed, 0.1); 
     nh_private.param<double>("angle_speed", angle_speed, 0.1);
     angle_speed*=PI;
+}
+void Pioneer::set_Position(struct POSITION &pos,double x,double y,double th)
+{
+    pos.x=x;
+    pos.y=y;
+    pos.th=th;
 }
 bool Pioneer::go_front()
 {
@@ -155,48 +186,202 @@ bool Pioneer::set_mode(int num)
 bool Pioneer::run_camera(cv::VideoCapture &cap)
 {
     cv::Mat frame;
+    cv::Mat resized_frame;
     cap>>frame;
 	if(frame.empty())
 	    return -1;
-    
     cv::namedWindow("frame");
     cv::moveWindow("frame",10,0);
+
+    int marker_value=0;
+    /*RGB*/
+    // for(int i=1;i<frame.rows-1;i++)
+    // {
+    //     for(int j=1;j<frame.cols-1;j++)
+    //     {
+    //         int R=frame.at<cv::Vec3b>(i,j)[2];
+    //         int G=frame.at<cv::Vec3b>(i,j)[1];
+    //         int B=frame.at<cv::Vec3b>(i,j)[0];
+
+    //         if(R>MARKER_COLOR.R-MARKER_COLOR.offset&&G<MARKER_COLOR.G+MARKER_COLOR.offset&&B<MARKER_COLOR.B+MARKER_COLOR.offset)
+    //         {
+    //             frame.at<cv::Vec3b>(i,j)[2]=255;
+    //             frame.at<cv::Vec3b>(i,j)[1]=0;
+    //             frame.at<cv::Vec3b>(i,j)[0]=0;
+    //             marker_value++;
+    //         }    
+    //     }
+    // }
+    /*RGB*/
+    
+    /*HSV*/
+    cv::Mat mod_frame;
+    cv::cvtColor(frame,mod_frame,cv::COLOR_BGR2HSV);
+    if(number==0)
+    {
+    for(int i=1;i<frame.rows-1;i++)
+    {
+        for(int j=1;j<frame.cols-1;j++)
+        {
+            int H=mod_frame.at<cv::Vec3b>(i,j)[0];
+            int S=mod_frame.at<cv::Vec3b>(i,j)[1];
+            int V=mod_frame.at<cv::Vec3b>(i,j)[2];
+
+            // cout <<H<<" "<<S<<" "<<V<<" "<<endl;
+            if((H>170||H<10)&&S>50)
+            {
+                frame.at<cv::Vec3b>(i,j)[2]=255;
+                frame.at<cv::Vec3b>(i,j)[1]=0;
+                frame.at<cv::Vec3b>(i,j)[0]=0;
+                marker_value++;
+            }    
+        }
+    }
+    ROS_INFO("Arrive");
+    // number++;
+    }   
+    /*HSV*/
     cv::imshow("frame",frame);
+    
+    /*RGB RESIZED - if frame is to big to run*/
+    // double resize_rate=0.1;
+    // cv::resize(frame,resized_frame,cv::Size(),resize_rate,resize_rate);
+    // for(int i=1;i<resized_frame.rows-1;i++)
+    // {
+    //     for(int j=1;j<resized_frame.cols-1;j++)
+    //     {
+    //         int R=resized_frame.at<cv::Vec3b>(i,j)[2];
+    //         int G=resized_frame.at<cv::Vec3b>(i,j)[1];
+    //         int B=resized_frame.at<cv::Vec3b>(i,j)[0];
+
+    //         if(R>MARKER_COLOR.R-MARKER_COLOR.offset&&G<MARKER_COLOR.G+MARKER_COLOR.offset&&B<MARKER_COLOR.B+MARKER_COLOR.offset)
+    //         {
+    //             resized_frame.at<cv::Vec3b>(i,j)[2]=255;
+    //             resized_frame.at<cv::Vec3b>(i,j)[1]=0;
+    //             resized_frame.at<cv::Vec3b>(i,j)[0]=0;
+    //             marker_value++;
+    //         }    
+    //     }
+    // }
+    // cv::imshow("frame",resized_frame);
+    /*RGB RESIZED*/
+    cout << marker_value<<endl;
+    Pioneer::visualize();
     if(cv::waitKey(10)==27)
         return 0;
     return true;
 }
+void Pioneer::set_color(struct COLOR &color,int R,int G,int B,int offset)
+{
+    color.R=R;
+    color.G=G;
+    color.B=B;
+    color.offset=offset;
+}
+void Pioneer::set_Visual_map(int cross,int row,int col)
+{
+    Map.cross=12;
+    Map.map_row=row;
+    Map.map_col=col;
+    Map.row_block=Map.map_row/cross;
+    Map.col_block=Map.map_col/cross;
+}
 void Pioneer::visualize()
 {
-    cv::Mat map(cv::Size(1001,1001),CV_32FC3,{0,0,0});
-    map.convertTo(map,CV_8UC3);
-    for(int i=0;i<=10;i++)
+    int cross=12;
+    int map_size_row=1200;
+    int map_size_col=1200;
+    int row_block=map_size_row/cross;
+    int col_block=map_size_col/cross;
+    //Make blank map
+    cv::Mat map(cv::Size(map_size_row,map_size_col),CV_8UC3,{0,0,0});
+    //Make grid map
+    for(int i=1;i<cross;i++)
     {
-        for(int j=0;j<=10;j++)
+        for(int k=0;k<map_size_row;k++)
         {
-            for(int k=0;k<map.rows/10;k++)
-            {
-                map.at<cv::Vec3b>(1+100*i,1+100*j-k)[2]=255;
-                map.at<cv::Vec3b>(1+100*i,1+100*j-k)[1]=255;
-                map.at<cv::Vec3b>(1+100*i,1+100*j-k)[0]=255;
-                map.at<cv::Vec3b>(1+100*i-k,1+100*j)[2]=255;
-                map.at<cv::Vec3b>(1+100*i-k,1+100*j)[1]=255;
-                map.at<cv::Vec3b>(1+100*i-k,1+100*j)[0]=255;
-            }
+            map.at<cv::Vec3b>(i*row_block,k)[2]=255;
+            map.at<cv::Vec3b>(i*row_block,k)[1]=255;
+            map.at<cv::Vec3b>(i*row_block,k)[0]=255;
         }
     }
-    
+    for(int j=1;j<cross;j++)
+    {
+        for(int k=0;k<map_size_row;k++)
+        {
+            map.at<cv::Vec3b>(k,j*col_block)[2]=255;
+            map.at<cv::Vec3b>(k,j*col_block)[1]=255;
+            map.at<cv::Vec3b>(k,j*col_block)[0]=255;
+        }
+    }
+    // Print Marker(whick is found)
+    for(int i=0;i<Pioneer::MARKER.size();i++)
+    {
+        Pioneer::draw_marker_at(convert_world_pos_y(Pioneer::MARKER[i].y),convert_world_pos_x(Pioneer::MARKER[i].x),map,MARKER_COLOR);
+    }
+    // //Print Order Seq
+    for(int i=0;i<Pioneer::Move_Order.size();i++)
+    {
+        Pioneer::draw_marker_at(convert_world_pos_y(Pioneer::Move_Order[i].y),convert_world_pos_x(Pioneer::Move_Order[i].x),map,ORDER_COLOR);
+    }
+    // //Print Robot
+    Pioneer::draw_robot_at(convert_world_pos_y(ROBOT.y),convert_world_pos_x(ROBOT.x),ROBOT.th,&map);
+    cv::namedWindow("map");
+    cv::moveWindow("map",865,0);
     cv::imshow("map",map);
-    cv::waitKey(10);
-
-
+}
+void Pioneer::draw_robot_at(double x,double y,double th,cv::Mat *map)
+{
+    double cos_th=cos(ROBOT.th);
+    double sin_th=sin(ROBOT.th);
+    
+    for(int i=-60;i<-5;i++)
+    {
+        for(int j=-3;j<=3;j++)
+        {
+            map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))[2]=ROBOT_COLOR_X.R;
+            map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))[1]=ROBOT_COLOR_X.G;
+            map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))[0]=ROBOT_COLOR_X.B;    
+        }
+    }
+    for(int i=5;i<60;i++)
+    {
+        for(int j=-3;j<=3;j++)
+        {
+            map->at<cv::Vec3b>(int(-i*sin_th-j*cos_th+x),int(i*cos_th-j*sin_th+y))[2]=ROBOT_COLOR_Y.R;
+            map->at<cv::Vec3b>(int(-i*sin_th-j*cos_th+x),int(i*cos_th-j*sin_th+y))[1]=ROBOT_COLOR_Y.G;
+            map->at<cv::Vec3b>(int(-i*sin_th-j*cos_th+x),int(i*cos_th-j*sin_th+y))[0]=ROBOT_COLOR_Y.B;    
+        }
+    }
+}
+void Pioneer::draw_marker_at(double x,double y,cv::Mat &map,struct COLOR color)
+{
+    for(int i=-5;i<=5;i++)
+    {
+        for(int j=-5;j<=5;j++)
+        {
+            map.at<cv::Vec3b>(i+x,j+y)[2]=color.R;
+            map.at<cv::Vec3b>(i+x,j+y)[1]=color.G;
+            map.at<cv::Vec3b>(i+x,j+y)[0]=color.B;
+        }
+    }
+}
+int Pioneer::convert_world_pos_x(double x)
+{
+    double world_x=Map.row_block*(x+1);
+    return int(world_x);
+}
+int Pioneer::convert_world_pos_y(double y)
+{
+    double world_y=Map.col_block*(double(Map.cross-1)-y);
+    return int(world_y);
 }
 bool Pioneer::run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap)
 {   ros::Rate rate(20);
     while(ros::ok())
     {
         Pioneer::run_camera(cap);
-        Pioneer::visualize();
+        // Pioneer::visualize();
         if(mode==MODE::Stop)
         {
             Pioneer::stop();
