@@ -145,8 +145,11 @@ void Pioneer::set_Position(struct POSITION &pos,double x,double y,double th)
 }
 void Pioneer::set_pose(double x,double y,double th)
 {
-    nav_msgs::Odometry temp;
-    
+    nav_msgs::Odometry temp=odom_msg;
+    temp.pose.pose.position.x=x;
+    temp.pose.pose.position.y=y;
+    temp.pose.pose.orientation.w=1;
+    temp.pose.pose.orientation.z=th;
     pose_vel_pub.publish(temp);
 
 }
@@ -493,6 +496,7 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
 }
 bool Pioneer::update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg)
 {
+    odom_msg=*msg;
     ROBOT.x=msg->pose.pose.position.x;
     ROBOT.y=msg->pose.pose.position.y;
     ROBOT.th=(msg->pose.pose.orientation.w)*3.14;
