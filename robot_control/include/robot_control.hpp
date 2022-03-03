@@ -28,9 +28,9 @@ struct POSITION
     int order_num;
 };
 struct COLOR{
-    int R;
-    int G;
-    int B;
+    uchar R;
+    uchar G;
+    uchar B;
     int offset;
 };
 struct Visual_Map{
@@ -109,7 +109,7 @@ Pioneer::Pioneer()
     Pioneer::set_color(ROBOT_COLOR_Y,100,100,200,0);
     Pioneer::set_color(ORDER_COLOR,20,20,235,0);
     Pioneer::set_Position(ROBOT,0,0,1);
-    Pioneer::set_Visual_map(12,1200,1200);
+    Pioneer::set_Visual_map(14,700,700);
     int number=0;
     add_path_or_marker(Move_Order,0,5,0);
     add_path_or_marker(Move_Order,0,10,1);
@@ -256,9 +256,7 @@ bool Pioneer::run_camera(cv::VideoCapture &cap)
                 
                 if((H>170||H<10)&&S>50&&V>30)
                 {
-                    frame.at<cv::Vec3b>(i,j)[2]=255;
-                    frame.at<cv::Vec3b>(i,j)[1]=0;
-                    frame.at<cv::Vec3b>(i,j)[0]=0;
+                    frame.at<cv::Vec3b>(i,j)={0,0,255};
                     marker_value++;
                     x_pos+=double(i)/double(MARKER_pixel);
                     y_pos+=double(j)/double(MARKER_pixel);
@@ -282,9 +280,7 @@ bool Pioneer::run_camera(cv::VideoCapture &cap)
             // cout <<H<<" "<<S<<" "<<V<<" "<<endl;
             if((H>170||H<10)&&S>50&&V>30)
             {
-                frame.at<cv::Vec3b>(i,j)[2]=255;
-                frame.at<cv::Vec3b>(i,j)[1]=0;
-                frame.at<cv::Vec3b>(i,j)[0]=0;
+                frame.at<cv::Vec3b>(i,j)={0,0,255};
                 marker_value++;
             }    
         }
@@ -317,7 +313,7 @@ bool Pioneer::run_camera(cv::VideoCapture &cap)
     // }
     // cv::imshow("frame",resized_frame);
     /*RGB RESIZED*/
-    cout << marker_value<<endl;
+    // cout << marker_value<<endl;
     Pioneer::visualize();
     if(cv::waitKey(10)==27)
         return 0;
@@ -332,7 +328,7 @@ void Pioneer::set_color(struct COLOR &color,int R,int G,int B,int offset)
 }
 void Pioneer::set_Visual_map(int cross,int row,int col)
 {
-    Map.cross=12;
+    Map.cross=cross;
     Map.map_row=row;
     Map.map_col=col;
     Map.row_block=Map.map_row/cross;
@@ -340,31 +336,20 @@ void Pioneer::set_Visual_map(int cross,int row,int col)
 }
 void Pioneer::visualize()
 {
-    int cross=12;
-    int map_size_row=1200;
-    int map_size_col=1200;
-    int row_block=map_size_row/cross;
-    int col_block=map_size_col/cross;
+    
     //Make blank map
     
-    cv::Mat map(cv::Size(map_size_row,map_size_col),CV_8UC3,{0,0,0});
+    cv::Mat map(cv::Size(Map.map_row,Map.map_col),CV_8UC3,{0,0,0});
     //Make grid map
-    for(int i=1;i<cross;i++)
+    for(int i=1;i<Map.cross;i++)
     {
-        for(int k=0;k<map_size_row;k++)
+        for(int k=0;k<Map.map_col;k++)
         {
-            map.at<cv::Vec3b>(i*row_block,k)[2]=255;
-            map.at<cv::Vec3b>(i*row_block,k)[1]=255;
-            map.at<cv::Vec3b>(i*row_block,k)[0]=255;
+            map.at<cv::Vec3b>(i*Map.row_block,k)={255,255,255};
         }
-    }
-    for(int j=1;j<cross;j++)
-    {
-        for(int k=0;k<map_size_row;k++)
+        for(int k=0;k<Map.map_row;k++)
         {
-            map.at<cv::Vec3b>(k,j*col_block)[2]=255;
-            map.at<cv::Vec3b>(k,j*col_block)[1]=255;
-            map.at<cv::Vec3b>(k,j*col_block)[0]=255;
+            map.at<cv::Vec3b>(k,i*Map.col_block)={255,255,255};
         }
     }
     // Print Marker(whick is found)
@@ -392,18 +377,14 @@ void Pioneer::draw_robot_at(double x,double y,double th,cv::Mat *map)
     {
         for(int j=-3;j<=3;j++)
         {
-            map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))[2]=ROBOT_COLOR_X.R;
-            map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))[1]=ROBOT_COLOR_X.G;
-            map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))[0]=ROBOT_COLOR_X.B;    
+            map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))={ROBOT_COLOR_X.B,ROBOT_COLOR_X.G,ROBOT_COLOR_X.R};
         }
     }
     for(int i=5;i<60;i++)
     {
         for(int j=-3;j<=3;j++)
         {
-            map->at<cv::Vec3b>(int(-i*sin_th-j*cos_th+x),int(i*cos_th-j*sin_th+y))[2]=ROBOT_COLOR_Y.R;
-            map->at<cv::Vec3b>(int(-i*sin_th-j*cos_th+x),int(i*cos_th-j*sin_th+y))[1]=ROBOT_COLOR_Y.G;
-            map->at<cv::Vec3b>(int(-i*sin_th-j*cos_th+x),int(i*cos_th-j*sin_th+y))[0]=ROBOT_COLOR_Y.B;    
+            map->at<cv::Vec3b>(int(-i*sin_th-j*cos_th+x),int(i*cos_th-j*sin_th+y))={ROBOT_COLOR_Y.B,ROBOT_COLOR_Y.G,ROBOT_COLOR_Y.R};    
         }
     }
 }
@@ -413,9 +394,7 @@ void Pioneer::draw_marker_at(double x,double y,cv::Mat &map,struct COLOR color)
     {
         for(int j=-5;j<=5;j++)
         {
-            map.at<cv::Vec3b>(i+x,j+y)[2]=color.R;
-            map.at<cv::Vec3b>(i+x,j+y)[1]=color.G;
-            map.at<cv::Vec3b>(i+x,j+y)[0]=color.B;
+            map.at<cv::Vec3b>(i+x,j+y)={color.B,color.G,color.R};
         }
     }
 }
