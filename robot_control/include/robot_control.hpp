@@ -18,8 +18,12 @@ const double Robot_center_to_camera_center = 0.34;//meter
 int MARKER_FULL_num= 24000;
 
 #define PI 3.141592
-
-enum MODE {Stop,Front,Right,Left,Back,No_Marker,Find_Marker,Goto_Marker,Position_adjust};
+ros::Subscriber pose_vel_sub;
+ros::Publisher cmd_vel_pub;
+ros::Publisher pose_vel_pub;
+ros::Subscriber key_input;
+enum MODE {Stop,Front,Right,Left,Back,Init};
+enum MARKER_MODE {No_Marker,Find_Marker,Goto_Marker,Position_adjust};
 struct POSITION
 {
     double x;
@@ -48,7 +52,8 @@ class Pioneer
     double current_time;
     int prev_mode;
     int mode;
-    int number;
+    int prev_Marker_mode;
+    int Marker_mode;
     int MARKER_pixel;
     struct COLOR MARKER_COLOR;
     struct COLOR ROBOT_COLOR_X;
@@ -58,6 +63,7 @@ class Pioneer
     struct POSITION ROBOT_POS;
     struct Visual_Map Map;
     geometry_msgs::Twist vel_msg;
+    nav_msgs::Odometry odom_msg;
 
     vector<POSITION> Adjust_Order;
     vector<POSITION> Move_Order;
@@ -78,9 +84,10 @@ class Pioneer
     bool turn_right();
     bool stop();
     bool back();
-    bool run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap);
-    bool update_ROBOT_Position();
+    bool run_robot(cv::VideoCapture &cap);
+    bool update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg);
     void add_path_or_marker(vector<POSITION> &Pos, int x,int y,int order_num);
+    void set_pose(double x,double y,double th);
     
     //Camera Part
     bool is_marker_on_sight();
@@ -110,9 +117,8 @@ Pioneer::Pioneer()
     Pioneer::set_color(ROBOT_COLOR_X,100,200,100,0);
     Pioneer::set_color(ROBOT_COLOR_Y,100,100,200,0);
     Pioneer::set_color(ORDER_COLOR,20,20,235,0);
-    Pioneer::set_Position(ROBOT,0,0,1);
+    Pioneer::set_Position(ROBOT,0,0,0);
     Pioneer::set_Visual_map(14,700,700);
-    int number=0;
     add_path_or_marker(Move_Order,0,5,0);
     add_path_or_marker(Move_Order,0,10,1);
     add_path_or_marker(Move_Order,10,10,2);
@@ -136,6 +142,13 @@ void Pioneer::set_Position(struct POSITION &pos,double x,double y,double th)
     pos.x=x;
     pos.y=y;
     pos.th=th;
+}
+void Pioneer::set_pose(double x,double y,double th)
+{
+    nav_msgs::Odometry temp;
+    
+    pose_vel_pub.publish(temp);
+
 }
 bool Pioneer::go_front()
 {
@@ -178,27 +191,27 @@ bool Pioneer::is_marker_on_sight()//30% of marker is shown
 {
     if(MARKER_pixel>=MARKER_FULL_num*0.85)//85% of Marker is shown
     {
-        mode=MODE::Goto_Marker;
+        Marker_mode=MARKER_MODE::Goto_Marker;
         return true;   
     }
-    else if(MARKER_pixel>=MARKER_FULL_num*0.8&&mode==MODE::Goto_Marker)//hysteresis - Goto
+    else if(MARKER_pixel>=MARKER_FULL_num*0.8&&Marker_mode==MARKER_MODE::Goto_Marker)//hysteresis - Goto
     {
-        mode=MODE::Goto_Marker;
+        Marker_mode=MARKER_MODE::Goto_Marker;
         return true;
     }
     else if(MARKER_pixel>=MARKER_FULL_num*0.3)//30% of Marker is shown
     {
-        mode=MODE::Find_Marker;
+        Marker_mode=MARKER_MODE::Find_Marker;
         return true;
     }
-    else if(MARKER_pixel>=MARKER_FULL_num*0.2&&mode==MODE::Find_Marker)//hysteresis - Find
+    else if(MARKER_pixel>=MARKER_FULL_num*0.2&&Marker_mode==MARKER_MODE::Find_Marker)//hysteresis - Find
     {
-        mode=MODE::Find_Marker;
+        Marker_mode=MARKER_MODE::Find_Marker;
         return true;
     }
     else
     {
-        //mode=MODE::No_Marker;
+        Marker_mode=MARKER_MODE::No_Marker;
         return false;
     }
 }
@@ -244,7 +257,7 @@ bool Pioneer::run_camera(cv::VideoCapture &cap)
 
     cv::Mat mod_frame;
     cv::cvtColor(frame,mod_frame,cv::COLOR_BGR2HSV);
-    if(mode==MODE::Find_Marker||mode==MODE::Goto_Marker)
+    if(Marker_mode==MARKER_MODE::Find_Marker||Marker_mode==MARKER_MODE::Goto_Marker)
     {
         double x_pos=0;
         double y_pos=0;
@@ -410,8 +423,8 @@ int Pioneer::convert_world_pos_y(double y)
     double world_y=Map.col_block*(double(Map.cross-1)-y);
     return int(world_y);
 }
-bool Pioneer::run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap)
-{   ros::Rate rate(10);
+bool Pioneer::run_robot(cv::VideoCapture &cap)
+{   ros::Rate rate(20);
     while(ros::ok())
     {
         Pioneer::run_camera(cap);
@@ -422,28 +435,33 @@ bool Pioneer::run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap)
             prev_mode=mode;
         }
         // Pioneer::visualize();
-        if(mode==MODE::Stop)
+        if(Marker_mode==MARKER_MODE::Position_adjust)
         {
-            Pioneer::stop();
+            
         }
-        else if(mode==MODE::Goto_Marker)
+        else if(Marker_mode==MARKER_MODE::Goto_Marker)
         {
             // Pioneer::stop();
             ROS_INFO("SEE MOST MARKER");
             //calculate middle pos
             //set to marker location
         }
-        else if(mode==MODE::Find_Marker)
+        else if(Marker_mode==MARKER_MODE::Find_Marker)
         {
             // Pioneer::stop();
             ROS_INFO("SEE MARKER");
             //calculate middle pos
             //set to marker location
         }
-        else if(mode==MODE::Position_adjust)
+        else if(Marker_mode==MARKER_MODE::No_Marker)
         {
             // Pioneer::stop();
             // ROS_INFO("STOP");
+        }
+
+        if(mode==MODE::Stop)
+        {
+            Pioneer::stop();
         }
         else if(mode==MODE::Front)
         {
@@ -461,10 +479,22 @@ bool Pioneer::run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap)
         {
             Pioneer::back();
         }
+        else if(mode==MODE::Init)
+        {
+            Pioneer::set_pose(0,0,0);
+            mode=MODE::Stop;
+        }
         cmd_vel_pub.publish(vel_msg);
         rate.sleep();
         ros::spinOnce();
     }
     return true;
 
+}
+bool Pioneer::update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg)
+{
+    ROBOT.x=msg->pose.pose.orientation.x;
+    ROBOT.y=msg->pose.pose.orientation.y;
+    ROBOT.th=msg->pose.pose.orientation.w;
+    return true;
 }

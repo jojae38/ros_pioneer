@@ -3,18 +3,17 @@ void poseCallback(const nav_msgs::Odometry::ConstPtr &msg);
 void keycallback(const std_msgs::Char::ConstPtr &msg);
 
 Pioneer Pioneer_;
-ros::Subscriber pose_vel_sub;
-ros::Publisher cmd_vel_pub;
-ros::Subscriber key_input;
+
 
 int main(int argc, char **argv)
 {
     ros::init(argc,argv,"Robot_control");
     ros::NodeHandle n;
 
-    pose_vel_sub=n.subscribe("/RosAria/pose",100,poseCallback);
+    pose_vel_sub=n.subscribe("/RosAria/pose",10,poseCallback);
     key_input=n.subscribe("key_input",10,keycallback);
     cmd_vel_pub=n.advertise<geometry_msgs::Twist>("/RosAria/cmd_vel",10);
+    // pose_vel_pub=n.advertise<nav_msgs::Odometry>("/RosAria/pose",1);
     Pioneer_.Get_param();
     cv::VideoCapture cap(0);
     if(!cap.isOpened())
@@ -22,7 +21,7 @@ int main(int argc, char **argv)
     else
         ROS_INFO("Camera model [ELP-USBFHD06H-L21] connected");
         
-    Pioneer_.run_robot(cmd_vel_pub,cap);
+    Pioneer_.run_robot(cap);
     return 0;    
 }
 void keycallback(const std_msgs::Char::ConstPtr &msg)
@@ -53,11 +52,14 @@ void keycallback(const std_msgs::Char::ConstPtr &msg)
         Pioneer_.set_mode(MODE::Back);
         ROS_INFO("CHANGE_MODE -> BACK");
     }
+    else if(msg->data=='i'||msg->data=='I')
+    {
+        Pioneer_.set_mode(MODE::Init);
+        ROS_INFO("CHANGE_MODE -> INIT");
+    }
     ROS_INFO("GET KEY %c",msg->data);
 }
 void poseCallback(const nav_msgs::Odometry::ConstPtr &msg)
 {
-    // cout << msg->header.frame_id <<endl;
-    // cout << msg->header.seq<<endl;
-    // cout << msg->header.stamp<<endl;
+    Pioneer_.update_ROBOT_Position(msg);
 }
