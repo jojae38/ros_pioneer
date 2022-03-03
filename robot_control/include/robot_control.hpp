@@ -46,6 +46,7 @@ class Pioneer
     double speed;
     double angle_speed;
     double current_time;
+    int prev_mode;
     int mode;
     int number;
     int MARKER_pixel;
@@ -99,6 +100,7 @@ class Pioneer
 Pioneer::Pioneer()
 {
     mode=MODE::Stop;
+    prev_mode=MODE::Stop;
     vel_msg.linear.y=0;
     vel_msg.linear.z=0;
     vel_msg.angular.x=0;
@@ -143,13 +145,13 @@ bool Pioneer::go_front()
 }
 bool Pioneer::turn_left()
 {
-    vel_msg.linear.x=speed;
+    vel_msg.linear.x=0;
     vel_msg.angular.z=angle_speed;
     return true;
 }
 bool Pioneer::turn_right()
 {
-    vel_msg.linear.x=speed;
+    vel_msg.linear.x=0;
     vel_msg.angular.z=-angle_speed;
     return true;
 }
@@ -196,7 +198,7 @@ bool Pioneer::is_marker_on_sight()//30% of marker is shown
     }
     else
     {
-        mode=MODE::No_Marker;
+        //mode=MODE::No_Marker;
         return false;
     }
 }
@@ -409,12 +411,16 @@ int Pioneer::convert_world_pos_y(double y)
     return int(world_y);
 }
 bool Pioneer::run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap)
-{   ros::Rate rate(20);
+{   ros::Rate rate(10);
     while(ros::ok())
     {
         Pioneer::run_camera(cap);
         is_marker_on_sight();
-        
+        if(mode!=prev_mode)
+        {
+            ROS_INFO("MODE_CHANGE TO %d",mode);
+            prev_mode=mode;
+        }
         // Pioneer::visualize();
         if(mode==MODE::Stop)
         {
