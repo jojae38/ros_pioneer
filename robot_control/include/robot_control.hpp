@@ -15,22 +15,17 @@ const double camera_width = 0.44;//meter
 const double camera_length = 0.34;//meter
 const double Robot_wheel_r = 0.11;//meter
 const double Robot_center_to_camera_center = 0.34;//meter
-const int MARKER_FULL_num= 1000;
+int MARKER_FULL_num= 24000;
 
 #define PI 3.141592
 
-enum MODE {Stop,Front,Right,Left,Back,Find_Marker,Goto_Marker,Position_adjust};
-struct ORDER
-{
-    double x;
-    double y;
-    int order_num;
-};
+enum MODE {Stop,Front,Right,Left,Back,No_Marker,Find_Marker,Goto_Marker,Position_adjust};
 struct POSITION
 {
     double x;
     double y;
     double th;
+    int order_num;
 };
 struct COLOR{
     int R;
@@ -63,8 +58,8 @@ class Pioneer
     struct Visual_Map Map;
     geometry_msgs::Twist vel_msg;
 
-    vector<ORDER> Adjust_Order;
-    vector<ORDER> Move_Order;
+    vector<POSITION> Adjust_Order;
+    vector<POSITION> Move_Order;
 
     POSITION ROBOT;
     vector<POSITION> MARKER;
@@ -84,10 +79,10 @@ class Pioneer
     bool back();
     bool run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap);
     bool update_ROBOT_Position();
+    void add_path_or_marker(vector<POSITION> &Pos, int x,int y,int order_num);
     
     //Camera Part
     bool is_marker_on_sight();
-    bool is_almost_marker_on_sight();
     bool Publish_image();
     bool run_camera(cv::VideoCapture &cap);
     
@@ -116,6 +111,10 @@ Pioneer::Pioneer()
     Pioneer::set_Position(ROBOT,0,0,1);
     Pioneer::set_Visual_map(12,1200,1200);
     int number=0;
+    add_path_or_marker(Move_Order,0,5,0);
+    add_path_or_marker(Move_Order,0,10,1);
+    add_path_or_marker(Move_Order,10,10,2);
+    add_path_or_marker(Move_Order,10,3,3);
     ROS_INFO("Starting Pioneer");
 }
 Pioneer::~Pioneer()
@@ -166,13 +165,40 @@ bool Pioneer::back()
     vel_msg.angular.z=0;
     return true;
 }
+void Pioneer::add_path_or_marker(vector<POSITION> &Pos, int x,int y,int order_num)
+{
+    POSITION temp;
+    set_Position(temp,x,y,0);
+    temp.order_num=order_num;
+    Pos.push_back(temp);
+}
 bool Pioneer::is_marker_on_sight()//30% of marker is shown
 {
-    return false;
-}
-bool Pioneer::is_almost_marker_on_sight()//90% of marker is shown
-{
-    return false;
+    if(MARKER_pixel>=MARKER_FULL_num*0.85)//85% of Marker is shown
+    {
+        mode=MODE::Goto_Marker;
+        return true;   
+    }
+    else if(MARKER_pixel>=MARKER_FULL_num*0.8&&mode==MODE::Goto_Marker)//hysteresis - Goto
+    {
+        mode=MODE::Goto_Marker;
+        return true;
+    }
+    else if(MARKER_pixel>=MARKER_FULL_num*0.3)//30% of Marker is shown
+    {
+        mode=MODE::Find_Marker;
+        return true;
+    }
+    else if(MARKER_pixel>=MARKER_FULL_num*0.2&&mode==MODE::Find_Marker)//hysteresis - Find
+    {
+        mode=MODE::Find_Marker;
+        return true;
+    }
+    else
+    {
+        mode=MODE::No_Marker;
+        return false;
+    }
 }
 bool Pioneer::set_mode(int num)
 {
@@ -213,11 +239,37 @@ bool Pioneer::run_camera(cv::VideoCapture &cap)
     //     }
     // }
     /*RGB*/
-    
-    /*HSV*/
+
     cv::Mat mod_frame;
     cv::cvtColor(frame,mod_frame,cv::COLOR_BGR2HSV);
-    if(number==0)
+    if(mode==MODE::Find_Marker||mode==MODE::Goto_Marker)
+    {
+        double x_pos=0;
+        double y_pos=0;
+        for(int i=1;i<frame.rows-1;i++)
+        {
+            for(int j=1;j<frame.cols-1;j++)
+            {
+                int H=mod_frame.at<cv::Vec3b>(i,j)[0];
+                int S=mod_frame.at<cv::Vec3b>(i,j)[1];
+                int V=mod_frame.at<cv::Vec3b>(i,j)[2];
+                
+                if((H>170||H<10)&&S>50&&V>30)
+                {
+                    frame.at<cv::Vec3b>(i,j)[2]=255;
+                    frame.at<cv::Vec3b>(i,j)[1]=0;
+                    frame.at<cv::Vec3b>(i,j)[0]=0;
+                    marker_value++;
+                    x_pos+=double(i)/double(MARKER_pixel);
+                    y_pos+=double(j)/double(MARKER_pixel);
+                }    
+            }
+        }
+        ROS_INFO("X_POS = %d",int(x_pos));
+        ROS_INFO("Y_POS = %d",int(y_pos));
+        MARKER_pixel=marker_value;
+    }/*HSV*/
+    else
     {
     for(int i=1;i<frame.rows-1;i++)
     {
@@ -228,7 +280,7 @@ bool Pioneer::run_camera(cv::VideoCapture &cap)
             int V=mod_frame.at<cv::Vec3b>(i,j)[2];
 
             // cout <<H<<" "<<S<<" "<<V<<" "<<endl;
-            if((H>170||H<10)&&S>50)
+            if((H>170||H<10)&&S>50&&V>30)
             {
                 frame.at<cv::Vec3b>(i,j)[2]=255;
                 frame.at<cv::Vec3b>(i,j)[1]=0;
@@ -237,12 +289,12 @@ bool Pioneer::run_camera(cv::VideoCapture &cap)
             }    
         }
     }
-    ROS_INFO("Arrive");
+    MARKER_pixel=marker_value;
     // number++;
     }   
-    /*HSV*/
     cv::imshow("frame",frame);
-    
+    /*HSV*/
+
     /*RGB RESIZED - if frame is to big to run*/
     // double resize_rate=0.1;
     // cv::resize(frame,resized_frame,cv::Size(),resize_rate,resize_rate);
@@ -294,6 +346,7 @@ void Pioneer::visualize()
     int row_block=map_size_row/cross;
     int col_block=map_size_col/cross;
     //Make blank map
+    
     cv::Mat map(cv::Size(map_size_row,map_size_col),CV_8UC3,{0,0,0});
     //Make grid map
     for(int i=1;i<cross;i++)
@@ -381,22 +434,24 @@ bool Pioneer::run_robot(ros::Publisher cmd_vel_pub,cv::VideoCapture &cap)
     while(ros::ok())
     {
         Pioneer::run_camera(cap);
+        is_marker_on_sight();
+        
         // Pioneer::visualize();
         if(mode==MODE::Stop)
         {
             Pioneer::stop();
         }
-        else if(mode==MODE::Find_Marker)
-        {
-            // Pioneer::stop();
-            // ROS_INFO("STOP");
-            //calculate middle pos
-            //set to marker location
-        }
         else if(mode==MODE::Goto_Marker)
         {
             // Pioneer::stop();
-            // ROS_INFO("STOP");
+            ROS_INFO("SEE MOST MARKER");
+            //calculate middle pos
+            //set to marker location
+        }
+        else if(mode==MODE::Find_Marker)
+        {
+            // Pioneer::stop();
+            ROS_INFO("SEE MARKER");
             //calculate middle pos
             //set to marker location
         }
