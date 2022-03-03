@@ -378,7 +378,7 @@ void Pioneer::visualize()
         Pioneer::draw_marker_at(convert_world_pos_y(Pioneer::Move_Order[i].y),convert_world_pos_x(Pioneer::Move_Order[i].x),map,ORDER_COLOR);
     }
     // //Print Robot
-    Pioneer::draw_robot_at(convert_world_pos_y(ROBOT.y),convert_world_pos_x(ROBOT.x),ROBOT.th,&map);
+    Pioneer::draw_robot_at(convert_world_pos_x(ROBOT.x),convert_world_pos_y(ROBOT.y),ROBOT.th,&map);
     cv::namedWindow("map");
     cv::moveWindow("map",865,0);
     cv::imshow("map",map);
@@ -493,8 +493,8 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
 }
 bool Pioneer::update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg)
 {
-    ROBOT.x=msg->pose.pose.orientation.x;
-    ROBOT.y=msg->pose.pose.orientation.y;
-    ROBOT.th=msg->pose.pose.orientation.w;
+    ROBOT.x=msg->pose.pose.position.x;
+    ROBOT.y=msg->pose.pose.position.y;
+    ROBOT.th=(msg->pose.pose.orientation.w)*3.14;
     return true;
 }
