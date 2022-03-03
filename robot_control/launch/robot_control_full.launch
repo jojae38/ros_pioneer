@@ -1,0 +1,9 @@
+<launch>
+	<node name="key_input_node" pkg="robot_control" type="key_input" output="screen"> </node>
+	<node name="robot_control_node" pkg="robot_control" type="robot_control" output="screen"> 
+		<param name="speed" type="double" value="0.1"/>
+		<param name="angle_speed" type="double" value="0.1"/>
+		<!-- *3.14 -->
+	</node>
+	<node name="RosAria_node" pkg="rosaria" type="RosAria" output="screen"> </node>
+</launch>

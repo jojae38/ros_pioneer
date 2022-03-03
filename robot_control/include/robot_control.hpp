@@ -113,12 +113,12 @@ Pioneer::Pioneer()
     vel_msg.angular.x=0;
     vel_msg.angular.y=0;
     MARKER_pixel=0;
-    Pioneer::set_color(MARKER_COLOR,290,-10,-10,100);
-    Pioneer::set_color(ROBOT_COLOR_X,100,200,100,0);
-    Pioneer::set_color(ROBOT_COLOR_Y,100,100,200,0);
-    Pioneer::set_color(ORDER_COLOR,20,20,235,0);
-    Pioneer::set_Position(ROBOT,0,0,0);
-    Pioneer::set_Visual_map(14,700,700);
+    set_color(MARKER_COLOR,290,-10,-10,100);
+    set_color(ROBOT_COLOR_X,100,200,100,0);
+    set_color(ROBOT_COLOR_Y,100,100,200,0);
+    set_color(ORDER_COLOR,20,20,235,0);
+    set_Position(ROBOT,0,0,0);
+    set_Visual_map(14,700,700);
     add_path_or_marker(Move_Order,0,5,0);
     add_path_or_marker(Move_Order,0,10,1);
     add_path_or_marker(Move_Order,10,10,2);
@@ -151,7 +151,6 @@ void Pioneer::set_pose(double x,double y,double th)
     temp.pose.pose.orientation.w=1;
     temp.pose.pose.orientation.z=th;
     pose_vel_pub.publish(temp);
-
 }
 bool Pioneer::go_front()
 {
@@ -381,7 +380,7 @@ void Pioneer::visualize()
         Pioneer::draw_marker_at(convert_world_pos_y(Pioneer::Move_Order[i].y),convert_world_pos_x(Pioneer::Move_Order[i].x),map,ORDER_COLOR);
     }
     // //Print Robot
-    Pioneer::draw_robot_at(convert_world_pos_y(ROBOT.y),convert_world_pos_x(ROBOT.x),ROBOT.th,&map);
+    Pioneer::draw_robot_at(convert_world_pos_y(ROBOT.x),convert_world_pos_x(ROBOT.y),ROBOT.th,&map);
     cv::namedWindow("map");
     cv::moveWindow("map",865,0);
     cv::imshow("map",map);
@@ -437,7 +436,7 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
             ROS_INFO("MODE_CHANGE TO %d",mode);
             prev_mode=mode;
         }
-        // Pioneer::visualize();
+        // Marker
         if(Marker_mode==MARKER_MODE::Position_adjust)
         {
             
@@ -462,6 +461,9 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
             // ROS_INFO("STOP");
         }
 
+        
+
+        // RUN
         if(mode==MODE::Stop)
         {
             Pioneer::stop();
@@ -497,8 +499,8 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
 bool Pioneer::update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg)
 {
     odom_msg=*msg;
-    ROBOT.x=msg->pose.pose.position.y;
-    ROBOT.y=msg->pose.pose.position.x;
+    ROBOT.x=msg->pose.pose.position.x;
+    ROBOT.y=msg->pose.pose.position.y;
     ROBOT.th=(msg->pose.pose.orientation.w)*PI;
     return true;
 }
