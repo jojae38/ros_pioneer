@@ -55,6 +55,7 @@ class Pioneer
     int prev_Marker_mode;
     int Marker_mode;
     int MARKER_pixel;
+    bool Arrive;
     struct COLOR MARKER_COLOR;
     struct COLOR ROBOT_COLOR_X;
     struct COLOR ROBOT_COLOR_Y;
@@ -66,6 +67,7 @@ class Pioneer
     nav_msgs::Odometry odom_msg;
 
     vector<POSITION> Adjust_Order;
+    int order_num;
     vector<POSITION> Move_Order;
 
     POSITION ROBOT;
@@ -78,6 +80,7 @@ class Pioneer
     //Robot Movement
     void Get_param();
     void set_Position(struct POSITION &pos,double x,double y,double th);
+    void add_Position(struct POSITION &pos,double x,double y,double th);
     bool set_mode(int num);
     bool go_front();
     bool turn_left();
@@ -88,6 +91,9 @@ class Pioneer
     bool update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg);
     void add_path_or_marker(vector<POSITION> &Pos, int x,int y,int order_num);
     void set_pose(double x,double y,double th);
+
+    void is_direction_match();
+    void is_destination_arrive();
     
     //Camera Part
     bool is_marker_on_sight();
@@ -119,10 +125,13 @@ Pioneer::Pioneer()
     set_color(ORDER_COLOR,20,20,235,0);
     set_Position(ROBOT,0,0,0);
     set_Visual_map(14,700,700);
+    order_num=0;
+    Arrive=false;
     add_path_or_marker(Move_Order,0,5,0);
     add_path_or_marker(Move_Order,0,10,1);
     add_path_or_marker(Move_Order,10,10,2);
     add_path_or_marker(Move_Order,10,3,3);
+    add_path_or_marker(Move_Order,0,0,999);
     ROS_INFO("Starting Pioneer");
 }
 Pioneer::~Pioneer()
@@ -142,6 +151,12 @@ void Pioneer::set_Position(struct POSITION &pos,double x,double y,double th)
     pos.x=x;
     pos.y=y;
     pos.th=th;
+}
+void Pioneer::add_Position(struct POSITION &pos,double x,double y,double th)
+{
+    pos.x+=x;
+    pos.y+=y;
+    pos.th+=th;
 }
 void Pioneer::set_pose(double x,double y,double th)
 {
@@ -380,7 +395,7 @@ void Pioneer::visualize()
         Pioneer::draw_marker_at(convert_world_pos_y(Pioneer::Move_Order[i].y),convert_world_pos_x(Pioneer::Move_Order[i].x),map,ORDER_COLOR);
     }
     // //Print Robot
-    Pioneer::draw_robot_at(convert_world_pos_y(ROBOT.x),convert_world_pos_x(ROBOT.y),ROBOT.th,&map);
+    Pioneer::draw_robot_at(convert_world_pos_y(ROBOT.y),convert_world_pos_x(ROBOT.x),ROBOT.th,&map);
     cv::namedWindow("map");
     cv::moveWindow("map",865,0);
     cv::imshow("map",map);
@@ -390,14 +405,14 @@ void Pioneer::draw_robot_at(double x,double y,double th,cv::Mat *map)
     double cos_th=cos(ROBOT.th);
     double sin_th=sin(ROBOT.th);
     
-    for(int i=-60;i<-5;i++)
+    for(int i=-40;i<-1;i++)
     {
         for(int j=-3;j<=3;j++)
         {
             map->at<cv::Vec3b>(int(i*cos_th+j*sin_th+x),int(i*sin_th-j*cos_th+y))={ROBOT_COLOR_X.B,ROBOT_COLOR_X.G,ROBOT_COLOR_X.R};
         }
     }
-    for(int i=5;i<60;i++)
+    for(int i=1;i<40;i++)
     {
         for(int j=-3;j<=3;j++)
         {
@@ -424,6 +439,38 @@ int Pioneer::convert_world_pos_y(double y)
 {
     double world_y=Map.col_block*(double(Map.cross-1)-y);
     return int(world_y);
+}
+void Pioneer::is_direction_match()
+{
+    int temp_x=Move_Order[order_num].x-ROBOT.x;
+    int temp_y=Move_Order[order_num].y-ROBOT.y;
+    double temp_th=acos(temp_x/sqrt((temp_x*temp_x+temp_y*temp_y)));
+    if(ROBOT.th<temp_th+0.1||ROBOT.th>temp_th-0.1)
+    {
+        ROS_INFO("Direction Matched");
+        mode=MODE::Front;
+    }
+    else
+    {
+        if(ROBOT.th<temp_th)
+            mode=MODE::Left;
+        else
+            mode=MODE::Right;
+    }
+}
+void Pioneer::is_destination_arrive()
+{
+    if(ROBOT.x<Move_Order[order_num].x+0.1||ROBOT.x>Move_Order[order_num].x-0.1)
+    {
+        if(ROBOT.y<Move_Order[order_num].y+0.1||ROBOT.y>Move_Order[order_num].y-0.1)
+        {
+            order_num++;
+            if(Move_Order[order_num].order_num==999)
+            {
+                Arrive=true;
+            }
+        }
+    }
 }
 bool Pioneer::run_robot(cv::VideoCapture &cap)
 {   ros::Rate rate(20);
@@ -461,7 +508,8 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
             // ROS_INFO("STOP");
         }
 
-        
+        // is_direction_match();
+        is_destination_arrive();
 
         // RUN
         if(mode==MODE::Stop)
@@ -471,18 +519,22 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
         else if(mode==MODE::Front)
         {
             Pioneer::go_front();
+            // add_Position(ROBOT,0.1,0,0);
         }
         else if(mode==MODE::Left)
         {
             Pioneer::turn_left();
+            // add_Position(ROBOT,0,0,0.05);
         }
         else if(mode==MODE::Right)
         {
             Pioneer::turn_right();
+            // add_Position(ROBOT,0,0,-0.05);
         }
         else if(mode==MODE::Back)
         {
             Pioneer::back();
+            // add_Position(ROBOT,-0.1,0,0);
         }
         else if(mode==MODE::Init)
         {
@@ -498,9 +550,11 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
 }
 bool Pioneer::update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg)
 {
+    //MATCH THIS DATA TO ROSARIA/POSE DATA
+    //x and y is ok but oriantation w? z? th is unstable rotate 90 degree and compare
     odom_msg=*msg;
     ROBOT.x=msg->pose.pose.position.x;
     ROBOT.y=msg->pose.pose.position.y;
-    ROBOT.th=(msg->pose.pose.orientation.w)*PI;
+    ROBOT.th=(msg->pose.pose.orientation.z)*PI;
     return true;
 }
