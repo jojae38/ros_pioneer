@@ -515,6 +515,7 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
         if(mode==MODE::Stop)
         {
             Pioneer::stop();
+            
         }
         else if(mode==MODE::Front)
         {
@@ -542,6 +543,8 @@ bool Pioneer::run_robot(cv::VideoCapture &cap)
             mode=MODE::Stop;
         }
         cmd_vel_pub.publish(vel_msg);
+        ros::Duration(1);
+        mode=MODE::Stop;
         rate.sleep();
         ros::spinOnce();
     }
@@ -559,7 +562,7 @@ bool Pioneer::update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg)
 
     tf::Pose pose;
     tf::poseMsgToTF(msg->pose.pose,pose);
-
+    //Turn Quaternion to Euler
     ROBOT.th=tf::getYaw(pose.getRotation());
     return true;
 }
