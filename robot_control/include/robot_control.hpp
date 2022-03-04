@@ -555,6 +555,11 @@ bool Pioneer::update_ROBOT_Position(const nav_msgs::Odometry::ConstPtr &msg)
     odom_msg=*msg;
     ROBOT.x=msg->pose.pose.position.x;
     ROBOT.y=msg->pose.pose.position.y;
-    ROBOT.th=(msg->pose.pose.orientation.z)*PI;
+
+
+    tf::Pose pose;
+    tf::poseMsgToTF(msg->pose.pose,pose);
+
+    ROBOT.th=tf::getYaw(pose.getRotation());
     return true;
 }
